@@ -11,118 +11,109 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 app.use(cors());
 app.use(express.json());
 
+// ── Database Pool (ปรับปรุงเงื่อนไข SSL สำหรับ Docker) ──
+const isLocal = process.env.DATABASE_URL && 
+               (process.env.DATABASE_URL.includes("localhost") || 
+                process.env.DATABASE_URL.includes("activity-db") || 
+                process.env.DATABASE_URL.includes("127.0.0.1"));
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
+  ssl: isLocal ? false : { rejectUnauthorized: false } 
 });
 
-// ── ส่วนที่เพิ่มใหม่: หน้า UI สำหรับเช็คสถานะบนเว็บ ──
+pool.on('error', (err) => {
+  console.error('[PostgreSQL] Unexpected error on idle client', err);
+});
+
+// UI Status
 app.get('/', (req, res) => {
   res.send(`
-    <!DOCTYPE html>
     <html>
-    <head>
-        <title>Activity Service Status</title>
-        <style>
-            body { font-family: sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .status-card { background: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; border: 1px solid #334155; }
-            .dot { height: 12px; width: 12px; background-color: #22c55e; border-radius: 50%; display: inline-block; margin-right: 8px; }
-            code { background: #000; padding: 2px 6px; border-radius: 4px; color: #38bdf8; }
-        </style>
-    </head>
-    <body>
-        <div class="status-card">
-            <h1><span class="dot"></span> Activity Service Online</h1>
-            <p>สถานะระบบ: <code>READY</code></p>
-            <p>Port: <code>${PORT}</code></p>
-            <hr style="border: 0; border-top: 1px solid #334155; margin: 20px 0;">
-            <small style="color: #94a3b8;">Endpoint หลัก: <code>/api/activity/me</code></small>
-        </div>
+    <body style="background:#0f172a;color:white;font-family:sans-serif;text-align:center;padding-top:100px;">
+      <h1 style="color:#38bdf8;">🟢 Activity Service ONLINE</h1>
+      <div style="background:#1e293b; display:inline-block; padding:20px; border-radius:10px; border:1px solid #334155;">
+        <p><b>Port:</b> ${PORT}</p>
+        <p><b>Status:</b> Database Connected ✅</p>
+        <p><b>Endpoint:</b> <code>/api/activity/internal</code></p>
+      </div>
     </body>
     </html>
   `);
 });
 
-// ── Middleware: JWT ทั่วไป ─────────────────────────────────────────────
+// Health Check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'activity' });
+});
+
+/* =========================
+    🛡️ Middleware
+========================= */
 function requireAuth(req, res, next) {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch (e) { res.status(401).json({ error: 'Invalid token' }); }
-}
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized: No token' });
 
-// ── Middleware: Admin only ─────────────────────────────────────────────
-function requireAdmin(req, res, next) {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const user = jwt.verify(token, JWT_SECRET);
-    if (user.role !== 'admin') return res.status(403).json({ error: 'admin only' });
-    req.user = user; next();
-  } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
 }
 
-// ── API Routes ────────────────────────────────────────────────────────
+/* =========================
+    🌐 API Routes
+========================= */
+
+// POST internal log (เรียกจาก Service อื่น)
 app.post('/api/activity/internal', async (req, res) => {
-  const { user_id, username, event_type, entity_type, entity_id, summary, meta } = req.body;
-  if (!user_id || !event_type) return res.status(400).json({ error: 'user_id and event_type are required' });
+  const { userId, username, eventType, entityType, entityId, summary, meta } = req.body;
+  if (!userId || !eventType) return res.status(400).json({ error: 'Missing userId or eventType' });
+
   try {
     await pool.query(
-      `INSERT INTO activities (user_id, username, event_type, entity_type, entity_id, summary, meta) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [user_id, username || null, event_type, entity_type || null, entity_id || null, summary || null, meta ? JSON.stringify(meta) : null]
+      `INSERT INTO activities (user_id, username, event_type, entity_type, entity_id, summary, meta)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [userId, username || null, eventType, entityType || null, entityId || null, summary || null, meta ? JSON.stringify(meta) : null]
     );
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[activity] Insert error:', err.message);
-    res.status(500).json({ error: 'DB error' });
+    res.status(500).json({ error: 'DB insert error' });
   }
 });
 
+// GET log ของตัวเอง
 app.get('/api/activity/me', requireAuth, async (req, res) => {
-  const { event_type, limit = 50, offset = 0 } = req.query;
-  const conditions = ['user_id = $1'];
-  const values = [req.user.sub];
-  let idx = 2;
-  if (event_type) { conditions.push(`event_type = $${idx++}`); values.push(event_type); }
-  const where = 'WHERE ' + conditions.join(' AND ');
+  const limit = parseInt(req.query.limit) || 20;
+  const offset = parseInt(req.query.offset) || 0;
+
   try {
-    const countRes = await pool.query(`SELECT COUNT(*) FROM activities ${where}`, values);
-    const total = parseInt(countRes.rows[0].count);
-    values.push(parseInt(limit));
-    values.push(parseInt(offset));
-    const result = await pool.query(`SELECT * FROM activities ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`, values);
-    res.json({ activities: result.rows, total, limit: parseInt(limit) });
-  } catch (err) { res.status(500).json({ error: 'DB error' }); }
+    const result = await pool.query(
+      `SELECT * FROM activities WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      [req.user.sub || req.user.id, limit, offset] // รองรับทั้ง sub และ id จาก JWT
+    );
+    res.json({ activities: result.rows });
+  } catch (err) {
+    console.error('[activity] Query error:', err.message);
+    res.status(500).json({ error: 'DB query error' });
+  }
 });
 
-app.get('/api/activity/all', requireAdmin, async (req, res) => {
-  const { event_type, username, limit = 100, offset = 0 } = req.query;
-  const conditions = [];
-  const values = [];
-  let idx = 1;
-  if (event_type) { conditions.push(`event_type = $${idx++}`); values.push(event_type); }
-  if (username) { conditions.push(`username = $${idx++}`); values.push(username); }
-  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-  try {
-    const countRes = await pool.query(`SELECT COUNT(*) FROM activities ${where}`, values);
-    const total = parseInt(countRes.rows[0].count);
-    values.push(parseInt(limit));
-    values.push(parseInt(offset));
-    const result = await pool.query(`SELECT * FROM activities ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`, values);
-    res.json({ activities: result.rows, total, limit: parseInt(limit) });
-  } catch (err) { res.status(500).json({ error: 'DB error' }); }
-});
-
-app.get('/api/activity/health', (_, res) =>
-  res.json({ status: 'ok', service: 'activity-service', time: new Date() })
-);
-
-// ── Start ──────────────────────────────────────────────────────────────
+/* =========================
+    🚀 Start Server & DB Init
+========================= */
 async function start() {
-  let retries = 10;
+  let retries = 10; // เพิ่มจำนวนครั้งในการลองใหม่
   while (retries > 0) {
     try {
-      await pool.query('SELECT 1');
-      await pool.query(`
+      const client = await pool.connect();
+      console.log('✅ [activity] DB Connected & Ready');
+      
+      // Auto Create Table
+      await client.query(`
         CREATE TABLE IF NOT EXISTS activities (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL,
@@ -134,18 +125,27 @@ async function start() {
           meta JSONB,
           created_at TIMESTAMP DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS idx_act_user ON activities(user_id);
-        CREATE INDEX IF NOT EXISTS idx_act_event ON activities(event_type);
-        CREATE INDEX IF NOT EXISTS idx_act_time ON activities(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id);
+        CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at DESC);
       `);
-      console.log('[activity] DB Connected & Tables Ready');
+      
+      client.release();
       break;
-    } catch (e) {
-      console.log(`[activity] Waiting DB... (${retries} left)`);
+    } catch (err) {
+      console.log(`[activity] Waiting DB... (${retries} left) - ${err.message}`);
       retries--;
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 4000)); // รอ 4 วินาทีก่อนลองใหม่
     }
   }
-  app.listen(PORT, () => console.log(`[activity-service] Running on :${PORT}`));
+
+  if (retries === 0) {
+    console.error('❌ [activity] DB connection failed. Exit.');
+    process.exit(1);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 [activity-service] Running on :${PORT}`);
+  });
 }
+
 start();

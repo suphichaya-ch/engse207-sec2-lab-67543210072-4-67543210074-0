@@ -1,59 +1,107 @@
 require('dotenv').config();
 const express = require('express');
-const cors    = require('cors');
-const { pool } = require('./db/db');
+const cors = require('cors');
+const { Pool } = require('pg');
 const tasksRouter = require('./routes/tasks');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3002;
+
+// ── Database Pool (ปรับปรุง SSL ให้รองรับ Docker Network) ──
+const isLocal = process.env.DATABASE_URL && 
+               (process.env.DATABASE_URL.includes("localhost") || 
+                process.env.DATABASE_URL.includes("task-db") || 
+                process.env.DATABASE_URL.includes("127.0.0.1"));
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: isLocal ? false : { rejectUnauthorized: false }, // ถ้าไม่ใช่ Local (เช่น Railway) ให้เปิด SSL
+  max: 10,
+  idleTimeoutMillis: 30000
+});
+
+// จัดการ error กรณี client หลุด
+pool.on('error', (err) => {
+  console.error('[PostgreSQL] Unexpected error on idle client', err);
+});
 
 app.use(cors());
 app.use(express.json());
 
-// --- ส่วนที่เพิ่มใหม่: หน้า UI สำหรับเช็คสถานะ Task Service บนเว็บ ---
+/* =========================
+    🌐 UI หน้า Status (Modern Look)
+========================= */
 app.get('/', (req, res) => {
   res.send(`
-    <!DOCTYPE html>
     <html>
-    <head>
-        <title>Task Service Status</title>
-        <style>
-            body { font-family: sans-serif; background: #064e3b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .status-card { background: #065f46; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; border: 1px solid #059669; width: 350px; }
-            .dot { height: 12px; width: 12px; background-color: #34d399; border-radius: 50%; display: inline-block; margin-right: 8px; animation: blink 1.5s infinite; }
-            @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-            code { background: #000; padding: 2px 6px; border-radius: 4px; color: #6ee7b7; }
-        </style>
-    </head>
-    <body>
-        <div class="status-card">
-            <h1><span class="dot"></span> Task Service</h1>
-            <p>สถานะ: <code>ONLINE</code></p>
-            <p>Port: <code>${PORT}</code></p>
-            <hr style="border: 0; border-top: 1px solid #059669; margin: 20px 0;">
-            <p style="font-size: 0.9rem;">API Endpoint: <code>/api/tasks</code></p>
-        </div>
+    <head><title>Task Service</title></head>
+    <body style="background:#064e3b; color:white; text-align:center; padding-top:100px; font-family:sans-serif; margin:0;">
+      <div style="background:rgba(0,0,0,0.2); display:inline-block; padding:40px; border-radius:20px; border:1px solid #059669;">
+        <h1 style="margin:0; font-size:32px;">🟢 Task Service ONLINE</h1>
+        <p style="opacity:0.8; margin-top:10px;">Port: ${PORT}</p>
+        <hr style="border:0; border-top:1px solid #059669; margin:20px 0;">
+        <p>API Endpoint: <code style="background:#022c22; padding:5px 10px; border-radius:5px;">/api/tasks</code></p>
+        <p>Status: <span style="color:#34d399;">Database Connected ✅</span></p>
+      </div>
     </body>
     </html>
   `);
 });
 
+/* =========================
+    ❤️ Health Check
+========================= */
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'task' }));
+
+/* =========================
+    🔌 API Routes
+========================= */
+// ส่ง pool ไปให้ router ใช้งานผ่าน middleware หรือวิธีอื่น (หรือใช้ Export ตามปกติ)
 app.use('/api/tasks', tasksRouter);
 
+/* =========================
+    🚀 Start Server + Auto Migration
+========================= */
 async function start() {
   let retries = 10;
   while (retries > 0) {
-    try { 
-      await pool.query('SELECT 1'); 
-      console.log('[task] DB Connected Successfully');
+    try {
+      // ใช้ client.connect เพื่อความชัวร์ในการเช็คสถานะ
+      const client = await pool.connect();
+      console.log("✅ [task] Database Connected & Ready");
+
+      // สร้าง table tasks และ index ถ้ายังไม่มี
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id SERIAL PRIMARY KEY,
+          title TEXT NOT NULL,
+          completed BOOLEAN DEFAULT false,
+          user_id INTEGER, -- เพิ่มไว้รองรับการระบุเจ้าของ task
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+      `);
+
+      client.release(); // คืน connection ให้ pool
       break; 
-    }
-    catch (e) {
-      console.log(`[task] Waiting DB... (${retries} left)`);
+    } catch (err) {
+      console.log(`[task] Waiting DB... (${retries} left) - ${err.message}`);
       retries--;
       await new Promise(r => setTimeout(r, 3000));
     }
   }
-  app.listen(PORT, () => console.log(`[task-service] Running on :${PORT}`));
+
+  if (retries === 0) {
+    console.error("❌ [task] DB connection failed. Exit.");
+    process.exit(1);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 [task-service] Running on Port :${PORT}`);
+  });
 }
+
 start();
+
+// ส่งออก pool เพื่อให้ในไฟล์ routes/tasks.js สามารถ require('{ pool }') ไปใช้ได้
+module.exports = { pool };

@@ -1,11 +1,18 @@
-FROM node:20-alpine
+# ── Base image ──
+FROM node:18-alpine
+
+# ── Set working directory ──
 WORKDIR /app
+
+# ── Copy package.json และ package-lock.json เพื่อ npm install ──
 COPY package*.json ./
-RUN npm install --omit=dev
-COPY src/ ./src/
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
-EXPOSE 3001
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3001/api/auth/health || exit 1
+RUN npm install --production
+
+# ── Copy โค้ดทั้งหมดของ activity-service ──
+COPY . .
+
+# ── Expose port (Railway จะ override ได้) ──
+EXPOSE 3003
+
+# ── Start server ──
 CMD ["node", "src/index.js"]
