@@ -5,51 +5,44 @@ const { generateToken, verifyToken } = require('../middleware/jwtUtils');
 
 const router = express.Router();
 
-// Dummy hash สำหรับ timing-safe compare
 const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8y0R6VQwWi4KFOeFHrgb3R04QLbL7a';
 
 /* ============================================================
-    🌐 GET Routes (เพื่อให้แสดงผลบน Browser ได้ และรองรับการดึงข้อมูลตัวตน)
+    🌐 GET Routes
    ============================================================ */
 
 router.get('/register', (req, res) => {
-  res.json({
-    status: "Online 🟢",
-    message: "Welcome to Auth API (Register Endpoint)",
-    method_required: "POST",
-    instruction: "Please use the Register form on the main page or send a POST request."
-  });
+  res.json({ status: "Online 🟢", message: "Welcome to Auth API (Register)" });
 });
 
 router.get('/login', (req, res) => {
-  res.json({
-    status: "Online 🟢",
-    message: "Welcome to Auth API (Login Endpoint)",
-    method_required: "POST",
-    instruction: "Please use the Login form on the main page or send a POST request."
-  });
+  res.json({ status: "Online 🟢", message: "Welcome to Auth API (Login)" });
 });
 
-// ⭐ เพิ่มใหม่: GET /api/auth/me (สำหรับดึงข้อมูลเจ้าของ Token)
+// ดึงข้อมูลตัวเอง (ตรวจสอบว่า verifyToken ทำงานได้ไหม)
 router.get('/me', verifyToken, (req, res) => {
-  res.json({ 
-    status: "Online 🟢",
-    message: "ตรวจสอบข้อมูลสำเร็จ",
-    user: req.user // ข้อมูลถูกแกะออกมาจาก Token โดย middleware verifyToken
-  });
+  try {
+    res.json({ 
+      status: "Online 🟢",
+      message: "ตรวจสอบข้อมูลสำเร็จ",
+      user: req.user 
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal Error in /me route" });
+  }
 });
 
-// ⭐ เพิ่มใหม่: Health Check
 router.get('/health', (req, res) => {
-  res.json({ status: "ok", service: "auth-service", timestamp: new Date() });
+  res.json({ status: "ok", service: "auth-service" });
 });
 
 /* ============================================================
-    🛠️ Helpers
+    🛠️ Helpers (ปรับปรุงเพื่อกัน Error 500)
    ============================================================ */
 
 async function logToDB({ level, event, userId, ip, message, meta }) {
   try {
+    if (!pool) return;
     await pool.query(
       `INSERT INTO logs (level, event, user_id, ip_address, message, meta)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -61,21 +54,26 @@ async function logToDB({ level, event, userId, ip, message, meta }) {
   }
 }
 
+// ปรับปรุง logActivity ให้ไม่พังถ้า fetch ไม่มีหรือ Service ปลายทางปิดอยู่
 async function logActivity(data) {
-  const ACTIVITY_URL = process.env.ACTIVITY_SERVICE_URL || 'http://activity-service:3003';
+  const ACTIVITY_URL = process.env.ACTIVITY_SERVICE_URL || 'https://activity-srevice-production.up.railway.app';
+  
   try {
-    fetch(`${ACTIVITY_URL}/api/activity/internal`, {
+    // ใช้ dynamic import สำหรับ node-fetch ถ้า fetch ปกติไม่มี
+    const fetchMethod = global.fetch || require('node-fetch'); 
+    
+    fetchMethod(`${ACTIVITY_URL}/api/activity/internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
-    }).catch(err => console.warn('[Activity-Service] Unreachable'));
+    }).catch(err => console.warn('[Activity-Service] Unreachable:', err.message));
   } catch (e) {
-    console.warn('[Activity-Service] fetch is not defined or failed');
+    console.warn('[Activity-Service] Logging failed silently');
   }
 }
 
 /* ============================================================
-    🔌 POST Routes (ตัวประมวลผลจริง)
+    🔌 POST Routes
    ============================================================ */
 
 router.post('/register', async (req, res) => {
@@ -101,21 +99,12 @@ router.post('/register', async (req, res) => {
     );
     const user = result.rows[0];
 
-    logToDB({
-      level: 'INFO', event: 'REGISTER_SUCCESS', userId: user.id, ip,
-      message: `New user registered: ${user.username}`
-    });
-
-    logActivity({
-      userId: user.id, username: user.username,
-      eventType: 'USER_REGISTERED', entityType: 'user', entityId: user.id,
-      summary: `${user.username} สมัครสมาชิกใหม่`
-    });
+    logToDB({ level: 'INFO', event: 'REGISTER_SUCCESS', userId: user.id, ip, message: `New user: ${user.username}` });
+    logActivity({ userId: user.id, username: user.username, eventType: 'USER_REGISTERED', summary: `${user.username} สมัครสมาชิกใหม่` });
 
     res.status(201).json({ message: 'สมัครสมาชิกสำเร็จ', user });
   } catch (err) {
-    console.error("🔥 REGISTER ERROR:", err.message);
-    res.status(500).json({ error: 'Server error', debug: err.message }); 
+    res.status(500).json({ error: 'Server error during registration', debug: err.message }); 
   }
 });
 
@@ -149,8 +138,7 @@ router.post('/login', async (req, res) => {
 
     res.json({ message: 'Login สำเร็จ', token, user: { id: user.id, username: user.username, role: user.role } });
   } catch (err) {
-    console.error("🔥 LOGIN ERROR:", err.message);
-    res.status(500).json({ error: 'Server error', debug: err.message });
+    res.status(500).json({ error: 'Server error during login', debug: err.message });
   }
 });
 
