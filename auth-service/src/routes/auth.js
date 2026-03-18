@@ -8,9 +8,35 @@ const router = express.Router();
 // Dummy hash สำหรับ timing-safe compare
 const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8y0R6VQwWi4KFOeFHrgb3R04QLbL7a';
 
-// ── Helper 1: บันทึก log ลง auth-db (ปรับให้ error ไม่พ่น 500) ──────────
+/* ============================================================
+    🌐 GET Routes (เพื่อให้แสดงผลบน Browser ได้ ไม่ขึ้นหน้าแดง)
+   ============================================================ */
+
+router.get('/register', (req, res) => {
+  res.json({
+    status: "Online 🟢",
+    message: "Welcome to Auth API (Register Endpoint)",
+    method_required: "POST",
+    instruction: "Please use the Register form on the main page or send a POST request."
+  });
+});
+
+router.get('/login', (req, res) => {
+  res.json({
+    status: "Online 🟢",
+    message: "Welcome to Auth API (Login Endpoint)",
+    method_required: "POST",
+    instruction: "Please use the Login form on the main page or send a POST request."
+  });
+});
+
+/* ============================================================
+    🛠️ Helpers
+   ============================================================ */
+
 async function logToDB({ level, event, userId, ip, message, meta }) {
   try {
+    // เพิ่ม ip_address ให้ตรงกับชื่อ column ในตาราง logs
     await pool.query(
       `INSERT INTO logs (level, event, user_id, ip_address, message, meta)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -22,11 +48,8 @@ async function logToDB({ level, event, userId, ip, message, meta }) {
   }
 }
 
-// ── Helper 2: ส่ง activity (ปรับเป็นแบบไม่รอผล เพื่อความปลอดภัย) ────────
 async function logActivity(data) {
   const ACTIVITY_URL = process.env.ACTIVITY_SERVICE_URL || 'http://activity-service:3003';
-  
-  // ใช้ global.fetch (Node 18+) หรือถ้าพังให้ข้ามไปเลย
   try {
     fetch(`${ACTIVITY_URL}/api/activity/internal`, {
       method: 'POST',
@@ -38,7 +61,10 @@ async function logActivity(data) {
   }
 }
 
-// ── POST /api/auth/register ────────────────────────────────────────────
+/* ============================================================
+    🔌 POST Routes (ตัวประมวลผลจริง)
+   ============================================================ */
+
 router.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.ip;
@@ -47,7 +73,6 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
 
   try {
-    // 1. เช็คว่ามี User หรือยัง
     const exists = await pool.query(
       'SELECT id FROM users WHERE email = $1 OR username = $2',
       [email.toLowerCase().trim(), username.trim()]
@@ -55,7 +80,6 @@ router.post('/register', async (req, res) => {
     if (exists.rows.length > 0)
       return res.status(409).json({ error: 'Email หรือ Username ถูกใช้งานแล้ว' });
 
-    // 2. Hash Password และ Insert
     const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
       `INSERT INTO users (username, email, password_hash, role)
@@ -64,7 +88,6 @@ router.post('/register', async (req, res) => {
     );
     const user = result.rows[0];
 
-    // 3. บันทึก Logs (แยกจากกัน ไม่ใช้ await ใน activity เพื่อความเร็ว)
     logToDB({
       level: 'INFO', event: 'REGISTER_SUCCESS', userId: user.id, ip,
       message: `New user registered: ${user.username}`
@@ -78,12 +101,11 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({ message: 'สมัครสมาชิกสำเร็จ', user });
   } catch (err) {
-    console.error("🔥 REGISTER ERROR:", err.message); // ดู Error จริงใน Terminal
+    console.error("🔥 REGISTER ERROR:", err.message);
     res.status(500).json({ error: 'Server error', debug: err.message }); 
   }
 });
 
-// ── POST /api/auth/login ───────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.ip;
@@ -118,7 +140,5 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Server error', debug: err.message });
   }
 });
-
-// ... (GET /verify, /me, /health คงเดิม) ...
 
 module.exports = router;
