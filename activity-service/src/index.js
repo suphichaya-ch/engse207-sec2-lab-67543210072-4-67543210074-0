@@ -6,8 +6,6 @@ const jwt = require('jsonwebtoken');
 
 const app  = express();
 const PORT = process.env.PORT || 3003;
-
-// ดึง Secret จาก Environment Variable (ต้องตรงกับ auth-service)
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 app.use(cors());
@@ -35,41 +33,50 @@ function requireAuth(req, res, next) {
     req.user = decoded;
     next();
   } catch (e) {
-    console.error("JWT Verify Error:", e.message);
     res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
 
 /* ============================================================
-    🌐 API Routes (แก้ไขแล้ว: ตัดตัวที่ซ้ำออก)
+    🌐 API Routes
    ============================================================ */
 
-// หน้าแรกเช็คสถานะ
 app.get('/', (req, res) => {
   res.json({ service: "Activity Service", status: "Online 🟢" });
 });
 
-// 1. ดึงประวัติกิจกรรม (GET /api/activity/me)
+// 1. ดูประวัติของตัวเอง (User ทั่วไป)
 app.get('/api/activity/me', requireAuth, async (req, res) => {
   try {
-    // ใช้ sub จาก Token (ปกติจะเป็น User ID)
     const userId = req.user.sub || req.user.id;
-    
     const result = await pool.query(
       `SELECT * FROM activities WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
       [userId]
     );
     res.json({ activities: result.rows });
   } catch (err) {
-    console.error("DB Query Error:", err.message);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ⭐ 2. ดูประวัติทั้งหมด (เพิ่มใหม่สำหรับ Admin)
+app.get('/api/activity/all', requireAuth, async (req, res) => {
+  try {
+    // เช็คว่าคนเรียกเป็น admin หรือไม่ (ถ้าใน Token มี role บอก)
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin access only' });
+    }
+
+    const result = await pool.query(`SELECT * FROM activities ORDER BY created_at DESC LIMIT 100`);
+    res.json({ activities: result.rows });
+  } catch (err) {
     res.status(500).json({ error: 'Database error', details: err.message });
   }
 });
 
-// 2. บันทึกกิจกรรม (POST /api/activity/internal) - ใช้เรียกภายในระหว่าง Service
+// 3. บันทึกกิจกรรม (Internal POST)
 app.post('/api/activity/internal', async (req, res) => {
   const { userId, username, eventType, entityType, entityId, summary, meta } = req.body;
-  
   if (!userId || !eventType) return res.status(400).json({ error: 'Missing userId or eventType' });
   
   try {
@@ -80,8 +87,7 @@ app.post('/api/activity/internal', async (req, res) => {
     );
     res.status(201).json({ ok: true });
   } catch (err) {
-    console.error("DB Insert Error:", err.message);
-    res.status(500).json({ error: 'Database insert error', details: err.message });
+    res.status(500).json({ error: 'Database insert error' });
   }
 });
 
@@ -91,11 +97,10 @@ app.post('/api/activity/internal', async (req, res) => {
 async function start() {
   try {
     await pool.query('SELECT 1'); 
-    console.log('✅ [activity] DB Connected & Ready');
+    console.log('✅ [activity] DB Connected');
   } catch (err) {
-    console.error('❌ [activity] DB Connection Failed:', err.message);
+    console.error('❌ [activity] DB Connection Failed');
   }
-  
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Activity Service running on port ${PORT}`);
   });
