@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>◉ Activity Timeline — ENGSE207 Sec2 Set 2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #08040f;
+      --bg2:      #0d0818;
+      --surface:  #130d20;
+      --surface2: #1a1130;
+      --border:   #2d1f4a;
+      --border2:  #3d2a60;
+      --text:     #e8d5ff;
+      --muted:    #8b6aad;
+      --neon:     #c026d3;
+      --neon2:    #a855f7;
+      --neon3:    #7c3aed;
+      --cyan:     #22d3ee;
+      --green:    #10b981;
+      --yellow:   #f59e0b;
+      --red:      #f43f5e;
+      --pink:     #ec4899;
+      --radius:   8px;
+      --glow:     0 0 20px rgba(192,38,211,.45);
+      --glow-sm:  0 0 10px rgba(192,38,211,.3);
+    }
+    body {
+      font-family: 'Rajdhani', system-ui, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 20% -10%, rgba(168,85,247,.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 110%, rgba(192,38,211,.1) 0%, transparent 60%);
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);
+    }
+    .hidden { display: none !important; }
+
+    /* HEADER */
+    .app-header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 1.1rem 2rem; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-header::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(168,85,247,.5), transparent);
+    }
+    .header-left { display: flex; align-items: center; gap: .75rem; }
+    .header-logo { font-family: 'Orbitron', monospace; font-size: 1rem; font-weight: 700; color: var(--neon2); text-shadow: 0 0 10px rgba(168,85,247,.4); }
+    .header-badge { padding: 2px 10px; border-radius: 999px; font-size: .72rem; font-weight: 700; font-family: 'Orbitron', monospace; }
+    .btn-back {
+      display: flex; align-items: center; gap: .4rem;
+      padding: .45rem 1rem; border-radius: 8px; background: var(--surface2);
+      border: 1px solid var(--border); color: var(--muted); font-size: .82rem;
+      cursor: pointer; text-decoration: none; transition: all .15s; font-weight: 600;
+    }
+    .btn-back:hover { color: var(--neon2); border-color: var(--neon2); }
+
+    /* MAIN */
+    .main { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* STATS */
+    .stats-row { display: grid; grid-template-columns: repeat(5,1fr); gap: .75rem; margin-bottom: 1.75rem; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: .85rem 1rem; text-align: center; transition: all .2s; position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--neon2), transparent);
+      opacity: 0; transition: opacity .2s;
+    }
+    .stat-card:hover::before { opacity: .7; }
+    .stat-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+    .stat-card .val { font-size: 1.4rem; font-weight: 700; font-family: 'Orbitron', monospace; }
+    .stat-card .lbl { font-size: .62rem; color: var(--muted); margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
+
+    /* TAB BAR */
+    .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px; width: fit-content; margin-bottom: 1.25rem; }
+    .tab-btn { padding: .42rem 1.1rem; border-radius: 6px; border: none; background: transparent; color: var(--muted); font-size: .82rem; font-weight: 700; cursor: pointer; transition: all .15s; font-family: 'Rajdhani', sans-serif; letter-spacing: .05em; }
+    .tab-btn.active { background: linear-gradient(135deg, var(--neon3), var(--neon)); color: white; box-shadow: var(--glow-sm); }
+
+    /* FILTER BAR */
+    .filter-bar { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .filter-chip {
+      padding: .4rem .85rem; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted); font-size: .78rem; font-weight: 700;
+      cursor: pointer; transition: all .15s; font-family: 'Rajdhani', sans-serif; letter-spacing: .04em;
+    }
+    .filter-chip:hover { border-color: var(--neon2); color: var(--neon2); }
+    .filter-chip.active { border-color: var(--neon2); background: rgba(168,85,247,.12); color: var(--neon2); box-shadow: 0 0 10px rgba(168,85,247,.15); }
+    .spacer { flex: 1; }
+    .btn-refresh {
+      display: flex; align-items: center; gap: .4rem; padding: .4rem .85rem; border-radius: 7px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+      font-size: .78rem; font-weight: 700; cursor: pointer; transition: all .15s; font-family: 'Rajdhani', sans-serif;
+    }
+    .btn-refresh:hover { color: var(--neon2); border-color: var(--neon2); }
+
+    /* TIMELINE */
+    .timeline { position: relative; padding-left: 2rem; }
+    .timeline::before {
+      content: ''; position: absolute; left: .55rem; top: 0; bottom: 0; width: 2px;
+      background: linear-gradient(180deg, transparent, var(--border2), var(--border2), transparent);
+    }
+    .tl-item { position: relative; margin-bottom: 1rem; animation: slideIn .25s ease both; }
+    .tl-item:nth-child(1){animation-delay:.03s} .tl-item:nth-child(2){animation-delay:.06s}
+    .tl-item:nth-child(3){animation-delay:.09s} .tl-item:nth-child(4){animation-delay:.12s}
+    .tl-item:nth-child(5){animation-delay:.15s} .tl-item:nth-child(6){animation-delay:.18s}
+    .tl-item:nth-child(7){animation-delay:.21s} .tl-item:nth-child(8){animation-delay:.24s}
+    @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+
+    .tl-dot {
+      position: absolute; left: -1.88rem; top: 1rem;
+      width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--bg);
+    }
+    .tl-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--border); border-radius: var(--radius);
+      padding: .85rem 1.1rem; transition: all .2s;
+    }
+    .tl-card:hover { transform: translateX(3px); border-color: var(--border2); }
+
+    /* event colors */
+    .ev-USER_REGISTERED .tl-card     { border-left-color: var(--green); box-shadow: inset 3px 0 12px rgba(16,185,129,.08); }
+    .ev-USER_REGISTERED .tl-dot      { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .ev-USER_LOGIN .tl-card           { border-left-color: var(--cyan); box-shadow: inset 3px 0 12px rgba(34,211,238,.08); }
+    .ev-USER_LOGIN .tl-dot            { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+    .ev-TASK_CREATED .tl-card         { border-left-color: var(--neon2); box-shadow: inset 3px 0 12px rgba(168,85,247,.08); }
+    .ev-TASK_CREATED .tl-dot          { background: var(--neon2); box-shadow: 0 0 6px var(--neon2); }
+    .ev-TASK_STATUS_CHANGED .tl-card  { border-left-color: var(--yellow); box-shadow: inset 3px 0 12px rgba(245,158,11,.08); }
+    .ev-TASK_STATUS_CHANGED .tl-dot   { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .ev-TASK_DELETED .tl-card         { border-left-color: var(--red); box-shadow: inset 3px 0 12px rgba(244,63,94,.08); }
+    .ev-TASK_DELETED .tl-dot          { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    .tl-top { display: flex; align-items: flex-start; gap: .75rem; }
+    .event-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .event-body { flex: 1; min-width: 0; }
+    .event-summary { font-size: .9rem; font-weight: 700; }
+    .event-meta { display: flex; align-items: center; gap: .5rem; margin-top: .3rem; flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 5px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; }
+    .chip-USER_REGISTERED    { background: rgba(16,185,129,.12);  color: #34d399; border: 1px solid rgba(16,185,129,.25); }
+    .chip-USER_LOGIN         { background: rgba(34,211,238,.1);   color: #67e8f9; border: 1px solid rgba(34,211,238,.2); }
+    .chip-TASK_CREATED       { background: rgba(168,85,247,.12);  color: #c4b5fd; border: 1px solid rgba(168,85,247,.2); }
+    .chip-TASK_STATUS_CHANGED{ background: rgba(245,158,11,.12);  color: #fbbf24; border: 1px solid rgba(245,158,11,.2); }
+    .chip-TASK_DELETED       { background: rgba(244,63,94,.12);   color: #fda4af; border: 1px solid rgba(244,63,94,.2); }
+    .chip-user               { background: rgba(34,211,238,.08);  color: #67e8f9; border: 1px solid rgba(34,211,238,.15); }
+    .event-time { font-size: .72rem; color: var(--muted); margin-left: auto; flex-shrink: 0; font-family: 'Orbitron', monospace; }
+
+    .meta-toggle { margin-top: .5rem; font-size: .72rem; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: .3rem; background: none; border: none; padding: 0; font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+    .meta-toggle:hover { color: var(--neon2); }
+    .meta-box { margin-top: .4rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .5rem .75rem; font-family: monospace; font-size: .7rem; color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+
+    /* PAGINATION */
+    .pagination { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+    .page-btn { padding: .4rem .85rem; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: .8rem; cursor: pointer; transition: all .15s; font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+    .page-btn:hover:not(:disabled) { border-color: var(--neon2); color: var(--neon2); }
+    .page-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .page-info { font-size: .78rem; color: var(--muted); padding: 0 .5rem; font-family: 'Orbitron', monospace; }
+
+    /* EMPTY/LOADING */
+    .empty-state { text-align: center; padding: 4rem 2rem; color: var(--muted); }
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(168,85,247,.25); border-top-color: var(--neon2); border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    /* TOAST */
+    .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
+    .toast { padding: .7rem 1.1rem; border-radius: 8px; font-size: .85rem; font-weight: 600; animation: fadeIn .2s ease; max-width: 300px; }
+    .toast.error { background: rgba(244,63,94,.1); color: #fda4af; border: 1px solid rgba(244,63,94,.3); }
+    .toast.info  { background: rgba(168,85,247,.1); color: #c4b5fd; border: 1px solid rgba(168,85,247,.3); }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-left">
+    <div class="header-logo">◉ ACTIVITY TIMELINE</div>
+    <span class="header-badge" id="header-role-badge" style="background:rgba(168,85,247,.15);color:#c4b5fd;border:1px solid rgba(168,85,247,.3)">...</span>
+  </div>
+  <a href="index.html" class="btn-back">← BACK</a>
+</header>
+
+<main class="main">
+
+  <div id="not-logged-in" class="empty-state hidden">
+    <div style="font-size:2.5rem;margin-bottom:.75rem;filter:drop-shadow(0 0 12px var(--neon))">⚡</div>
+    <p style="font-family:'Orbitron',monospace;font-size:.9rem;color:var(--neon2);margin-bottom:.5rem">ACCESS DENIED</p>
+    <p>กรุณา Login ก่อนเข้าใช้งาน</p>
+    <a href="index.html" style="display:inline-block;margin-top:1.25rem;padding:.55rem 1.2rem;background:linear-gradient(135deg,var(--neon3),var(--neon));color:white;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:700;font-family:'Orbitron',monospace;box-shadow:var(--glow-sm)">ENTER SYSTEM →</a>
+  </div>
+
+  <div id="main-content">
+    <div class="stats-row">
+      <div class="stat-card"><div class="val" id="st-total">—</div><div class="lbl">TOTAL</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--green)"  id="st-reg">—</div><div class="lbl">REGISTERED</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--cyan)"   id="st-login">—</div><div class="lbl">LOGIN</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--neon2)"  id="st-created">—</div><div class="lbl">CREATED</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--red)"    id="st-deleted">—</div><div class="lbl">DELETED</div></div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('me')">◈ MY ACTIVITY</button>
+      <button class="tab-btn" id="tab-all" onclick="switchTab('all')" style="display:none">◉ ALL (ADMIN)</button>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-chip active" onclick="setFilter('ALL')">ALL</button>
+      <button class="filter-chip" onclick="setFilter('USER_REGISTERED')">REGISTERED</button>
+      <button class="filter-chip" onclick="setFilter('USER_LOGIN')">LOGIN</button>
+      <button class="filter-chip" onclick="setFilter('TASK_CREATED')">CREATED</button>
+      <button class="filter-chip" onclick="setFilter('TASK_STATUS_CHANGED')">STATUS</button>
+      <button class="filter-chip" onclick="setFilter('TASK_DELETED')">DELETED</button>
+      <div class="spacer"></div>
+      <button class="btn-refresh" onclick="loadActivities()">⟳ REFRESH</button>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <div class="empty-state"><div class="spinner"></div><p style="margin-top:1rem;font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:.1em">LOADING...</p></div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+      <button class="page-btn" id="btn-prev" onclick="changePage(-1)">← PREV</button>
+      <span class="page-info" id="page-info">1 / 1</span>
+      <button class="page-btn" id="btn-next" onclick="changePage(1)">NEXT →</button>
+    </div>
+  </div>
+</main>
+
+<div class="toast-container" id="toast-container"></div>
+<script src="config.js"></script>
+<script>
+/* ─────────────────────────────────────
+   STATE & CONFIG
+───────────────────────────────────── */
+const ACTIVITY = window.APP_CONFIG.ACTIVITY_URL;
+const token     = localStorage.getItem('jwt_token');
+
+let allActivities = [];
+let filtered      = [];
+let currentFilter = 'ALL';
+let currentTab    = 'me';
+let currentPage   = 1;
+const PAGE_SIZE   = 20;
+let isAdmin       = false;
+
+/* ─────────────────────────────────────
+   INIT
+───────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  if (!token) {
+    document.getElementById('main-content').classList.add('hidden');
+    document.getElementById('not-logged-in').classList.remove('hidden');
+    return;
+  }
+
+  // Decode JWT payload เพื่อแสดง username และ role
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    isAdmin = payload.role === 'admin';
+
+    const badge = document.getElementById('header-role-badge');
+    badge.textContent = (payload.username || payload.email || '—').toUpperCase();
+
+    if (isAdmin) {
+      badge.style.background  = 'rgba(192,38,211,.15)';
+      badge.style.color       = '#e879f9';
+      badge.style.borderColor = 'rgba(192,38,211,.3)';
+      document.getElementById('tab-all').style.display = 'block';
+    }
+  } catch (e) {}
+
+  loadActivities();
+});
+
+/* ─────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────── */
+function switchTab(tab) {
+  currentTab  = tab;
+  currentPage = 1;
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active',
+      (i === 0 && tab === 'me') || (i === 1 && tab === 'all')
+    );
+  });
+  loadActivities();
+}
+
+/* ─────────────────────────────────────
+   FILTER
+───────────────────────────────────── */
+function setFilter(f) {
+  currentFilter = f;
+  currentPage   = 1;
+  document.querySelectorAll('.filter-chip').forEach(b => {
+    b.classList.toggle('active',
+      b.onclick?.toString().includes(`'${f}'`) ||
+      (f === 'ALL' && b.textContent.trim() === 'ALL')
+    );
+  });
+  applyFilterAndRender();
+}
+
+/* ─────────────────────────────────────
+   LOAD ACTIVITIES
+───────────────────────────────────── */
+async function loadActivities() {
+  renderLoading();
+  try {
+    const url = currentTab === 'all'
+      ? `${ACTIVITY}/api/activity/all?limit=200&offset=0`
+      : `${ACTIVITY}/api/activity/me?limit=200&offset=0`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res.status === 401) {
+      toast('Session expired — please login', 'error');
+      return;
+    }
+    if (res.status === 403) {
+      toast('🚫 Admin only', 'error');
+      switchTab('me');
+      return;
+    }
+    if (!res.ok) {
+      toast('❌ Cannot load activities', 'error');
+      renderEmpty('Error loading data');
+      return;
+    }
+
+    const data = await res.json();
+    allActivities = data.activities || [];
+    updateStats();
+    applyFilterAndRender();
+  } catch (e) {
+    toast('❌ Cannot connect to Activity Service', 'error');
+    renderEmpty('Cannot connect to Activity Service');
+  }
+}
+
+/* ─────────────────────────────────────
+   STATS
+───────────────────────────────────── */
+function updateStats() {
+  const a = allActivities;
+  document.getElementById('st-total').textContent   = a.length;
+  document.getElementById('st-reg').textContent     = a.filter(x => x.event_type === 'USER_REGISTERED').length;
+  document.getElementById('st-login').textContent   = a.filter(x => x.event_type === 'USER_LOGIN').length;
+  document.getElementById('st-created').textContent = a.filter(x => x.event_type === 'TASK_CREATED').length;
+  document.getElementById('st-deleted').textContent = a.filter(x => x.event_type === 'TASK_DELETED').length;
+}
+
+/* ─────────────────────────────────────
+   FILTER + PAGINATE + RENDER
+───────────────────────────────────── */
+function applyFilterAndRender() {
+  filtered = currentFilter === 'ALL'
+    ? allActivities
+    : allActivities.filter(a => a.event_type === currentFilter);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start     = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+  renderTimeline(pageItems);
+  renderPagination(totalPages);
+}
+
+function changePage(delta) {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+  applyFilterAndRender();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ─────────────────────────────────────
+   RENDER CONSTANTS
+───────────────────────────────────── */
+const ICONS = {
+  USER_REGISTERED:     '🟢',
+  USER_LOGIN:          '🔵',
+  TASK_CREATED:        '🟣',
+  TASK_STATUS_CHANGED: '🟡',
+  TASK_DELETED:        '🔴',
+};
+
+const LABELS = {
+  USER_REGISTERED:     'REGISTERED',
+  USER_LOGIN:          'LOGIN',
+  TASK_CREATED:        'TASK CREATED',
+  TASK_STATUS_CHANGED: 'STATUS CHANGED',
+  TASK_DELETED:        'DELETED',
+};
+
+/* ─────────────────────────────────────
+   RENDER HELPERS
+───────────────────────────────────── */
+function renderLoading() {
+  document.getElementById('timeline').innerHTML = `
+    <div class="empty-state">
+      <div class="spinner"></div>
+      <p style="margin-top:1rem;font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:.1em">LOADING...</p>
+    </div>`;
+  document.getElementById('pagination').style.display = 'none';
+}
+
+function renderEmpty(msg) {
+  document.getElementById('timeline').innerHTML = `
+    <div class="empty-state">
+      <div style="font-size:2rem;margin-bottom:.75rem;color:var(--neon2)">◈</div>
+      <p style="font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:.1em">${escHtml(msg)}</p>
+    </div>`;
+  document.getElementById('pagination').style.display = 'none';
+}
+
+/* ─────────────────────────────────────
+   RENDER TIMELINE
+───────────────────────────────────── */
+function renderTimeline(items) {
+  if (!items.length) {
+    renderEmpty('NO ACTIVITY');
+    return;
+  }
+
+  document.getElementById('timeline').innerHTML = items.map(a => {
+    const hasMeta = a.meta && Object.keys(a.meta).length > 0;
+
+    return `
+      <div class="tl-item ev-${escHtml(a.event_type)}">
+        <div class="tl-dot"></div>
+        <div class="tl-card">
+          <div class="tl-top">
+            <div class="event-icon">${ICONS[a.event_type] || '⚪'}</div>
+            <div class="event-body">
+              <div class="event-summary">${escHtml(a.summary || a.event_type)}</div>
+              <div class="event-meta">
+                <span class="chip chip-${escHtml(a.event_type)}">${LABELS[a.event_type] || a.event_type}</span>
+                ${a.username
+                  ? `<span class="chip chip-user">◈ ${escHtml(a.username)}</span>`
+                  : ''}
+                ${a.entity_type && a.entity_id
+                  ? `<span style="font-size:.68rem;color:var(--muted);font-family:'Orbitron',monospace">${escHtml(a.entity_type)} #${a.entity_id}</span>`
+                  : ''}
+              </div>
+              ${hasMeta ? `
+                <button class="meta-toggle" onclick="toggleMeta(this)">
+                  <span>▶</span> VIEW META
+                </button>
+                <div class="meta-box hidden">${escHtml(JSON.stringify(a.meta, null, 2))}</div>
+              ` : ''}
+            </div>
+            <div class="event-time">${formatTime(a.created_at)}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ─────────────────────────────────────
+   RENDER PAGINATION
+───────────────────────────────────── */
+function renderPagination(totalPages) {
+  const pg = document.getElementById('pagination');
+
+  if (filtered.length <= PAGE_SIZE) {
+    pg.style.display = 'none';
+    return;
+  }
+
+  pg.style.display = 'flex';
+  document.getElementById('page-info').textContent     = `${currentPage} / ${totalPages}`;
+  document.getElementById('btn-prev').disabled         = currentPage <= 1;
+  document.getElementById('btn-next').disabled         = currentPage >= totalPages;
+}
+
+/* ─────────────────────────────────────
+   META TOGGLE
+───────────────────────────────────── */
+function toggleMeta(btn) {
+  const box  = btn.nextElementSibling;
+  const open = !box.classList.contains('hidden');
+  box.classList.toggle('hidden', open);
+  btn.querySelector('span').textContent = open ? '▶' : '▼';
+  btn.childNodes[1].textContent         = open ? ' VIEW META' : ' HIDE META';
+}
+
+/* ─────────────────────────────────────
+   UTILS
+───────────────────────────────────── */
+function formatTime(iso) {
+  if (!iso) return '—';
+  const d       = new Date(iso);
+  const now     = new Date();
+  const diffMin = Math.floor((now - d) / 60000);
+  const diffHr  = Math.floor((now - d) / 3600000);
+
+  if (diffMin < 1)  return 'JUST NOW';
+  if (diffMin < 60) return `${diffMin}m AGO`;
+  if (diffHr  < 24) return `${diffHr}h AGO`;
+  return d.toLocaleString('th-TH', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function toast(msg, type = 'info', duration = 3500) {
+  const t = document.createElement('div');
+  t.className  = `toast ${type}`;
+  t.textContent = msg;
+  document.getElementById('toast-container').prepend(t);
+  setTimeout(() => t.remove(), duration);
+}
+</script>
+</body>
+</html>

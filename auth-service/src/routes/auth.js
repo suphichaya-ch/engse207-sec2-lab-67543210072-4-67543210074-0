@@ -9,7 +9,7 @@ const router = express.Router();
 const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8y0R6VQwWi4KFOeFHrgb3R04QLbL7a';
 
 /* ============================================================
-    🌐 GET Routes (เพื่อให้แสดงผลบน Browser ได้ ไม่ขึ้นหน้าแดง)
+    🌐 GET Routes (เพื่อให้แสดงผลบน Browser ได้ และรองรับการดึงข้อมูลตัวตน)
    ============================================================ */
 
 router.get('/register', (req, res) => {
@@ -30,13 +30,26 @@ router.get('/login', (req, res) => {
   });
 });
 
+// ⭐ เพิ่มใหม่: GET /api/auth/me (สำหรับดึงข้อมูลเจ้าของ Token)
+router.get('/me', verifyToken, (req, res) => {
+  res.json({ 
+    status: "Online 🟢",
+    message: "ตรวจสอบข้อมูลสำเร็จ",
+    user: req.user // ข้อมูลถูกแกะออกมาจาก Token โดย middleware verifyToken
+  });
+});
+
+// ⭐ เพิ่มใหม่: Health Check
+router.get('/health', (req, res) => {
+  res.json({ status: "ok", service: "auth-service", timestamp: new Date() });
+});
+
 /* ============================================================
     🛠️ Helpers
    ============================================================ */
 
 async function logToDB({ level, event, userId, ip, message, meta }) {
   try {
-    // เพิ่ม ip_address ให้ตรงกับชื่อ column ในตาราง logs
     await pool.query(
       `INSERT INTO logs (level, event, user_id, ip_address, message, meta)
        VALUES ($1, $2, $3, $4, $5, $6)`,
