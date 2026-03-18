@@ -1,0 +1,12 @@
+{
+  "name": "final-lab-sec2-set2-67543210072-67543210074",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
