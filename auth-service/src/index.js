@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
-const path    = require('path'); // เพิ่มตรงนี้
 const { pool } = require('./db/db');
 const authRouter = require('./routes/auth');
 
@@ -11,17 +10,48 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// --- ส่วนที่เพิ่มใหม่: บอกให้ Express ส่งไฟล์หน้าเว็บที่อยู่ในโฟลเดอร์ public ---
-app.use(express.static(path.join(__dirname, '../public')));
-
-// หน้าแรกของเว็บ (จะโชว์ข้อความนี้ถ้าหาไฟล์ index.html ไม่เจอ)
+// --- แก้ใหม่: เข้าหน้าแรกปุ๊บ เจอหน้าสมัครสมาชิกทันที ไม่ต้องง้อไฟล์ public ---
 app.get('/', (req, res) => {
   res.send(`
-    <div style="text-align:center; margin-top:50px; font-family: sans-serif;">
-      <h1>🔐 Auth Service is Online</h1>
-      <p>API is ready at <code>/api/auth</code></p>
-      <a href="/register.html" style="color: blue;">Go to Register Page</a>
-    </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Auth Service - Register</title>
+        <style>
+            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a1a; color: white; }
+            .card { background: #2d2d2d; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 320px; text-align: center; }
+            input { width: 100%; margin: 10px 0; padding: 12px; border-radius: 6px; border: 1px solid #444; background: #3d3d3d; color: white; box-sizing: border-box; }
+            button { width: 100%; padding: 12px; margin-top: 10px; background: #8a2be2; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+            #msg { margin-top: 15px; color: #d8b4fe; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>📝 สมัครสมาชิก (Auth)</h2>
+            <input type="text" id="user" placeholder="Username">
+            <input type="password" id="pass" placeholder="Password">
+            <button onclick="doRegister()">สมัครสมาชิก</button>
+            <div id="msg">พร้อมเชื่อมต่อระบบ</div>
+        </div>
+        <script>
+            async function doRegister() {
+                const user = document.getElementById('user').value;
+                const pass = document.getElementById('pass').value;
+                const msg = document.getElementById('msg');
+                msg.innerText = "กำลังส่งข้อมูล...";
+                try {
+                    const res = await fetch('/api/auth/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: user, password: pass })
+                    });
+                    const data = await res.json();
+                    msg.innerText = data.message || "สำเร็จ!";
+                } catch (err) { msg.innerText = "เชื่อมต่อ API ล้มเหลว"; }
+            }
+        </script>
+    </body>
+    </html>
   `);
 });
 
