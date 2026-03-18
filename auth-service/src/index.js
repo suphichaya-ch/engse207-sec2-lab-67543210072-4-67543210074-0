@@ -1,4 +1,5 @@
 require('dotenv').config();
+console.log("🔥 NEW VERSION LOADED");
 const express = require('express');
 const cors    = require('cors');
 const { pool } = require('./db/db');
