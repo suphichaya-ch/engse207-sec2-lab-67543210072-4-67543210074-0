@@ -1,38 +1,40 @@
 const { verifyToken } = require('./jwtUtils');
 
-module.exports = function requireAuth(req, res, next) {
-  // 1. ดึง Token จาก Header Authorization
+module.exports = async function requireAuth(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
 
-  // 2. ถ้าไม่มี Token ให้ปฏิเสธการเข้าถึงทันที
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
   try {
-    // 3. ตรวจสอบความถูกต้องของ Token (จะได้ Payload: { sub, email, role, username })
     const decoded = verifyToken(token);
     req.user = decoded; 
-    next(); // ผ่านด่าน! ไปทำงานใน Controller/Route ต่อได้
+    next(); 
   } catch (err) {
-    // 4. กรณี Token ผิดพลาด (หมดอายุ หรือ ปลอม)
-    // ส่ง Log ไปที่ Log Service (Fire-and-forget: ไม่ต้องรอผลลัพธ์)
-    fetch('http://log-service:3003/api/logs/internal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service: 'task-service', 
-        level: 'ERROR', 
-        event: 'JWT_INVALID',
-        ip_address: req.headers['x-real-ip'] || req.ip,
-        message: 'Invalid JWT: ' + err.message,
-        meta: { error: err.message }
-      })
-    }).catch(() => {
-      // ถ้า Log service ล่ม ก็ปล่อยผ่าน ไม่ให้ระบบหลักค้าง
-    });
+    // 🚩 ส่วนนี้คือจุดที่มักจะทำแอปพัง (สีแดง) ถ้า Log Service มีปัญหา
+    const logUrl = process.env.LOG_SERVICE_URL || 'http://localhost:3003';
+    
+    // หุ้มด้วย try-catch อีกชั้นเพื่อไม่ให้ error ของ fetch ทำแอปพัง
+    try {
+      if (typeof fetch !== 'undefined') {
+        fetch(`${logUrl}/api/logs/internal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service: 'task-service', 
+            level: 'ERROR', 
+            event: 'JWT_INVALID',
+            message: 'Invalid JWT: ' + err.message
+          })
+        }).catch(() => {}); // ignore fetch error
+      }
+    } catch (logErr) {
+      console.error("Failed to send log:", logErr.message);
+    }
 
+    // ส่งคำตอบกลับไปหา User ทันที (ไม่ต้องรอส่ง log เสร็จ)
     return res.status(401).json({ error: 'Unauthorized: ' + err.message });
   }
 };
