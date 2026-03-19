@@ -10,8 +10,8 @@
 
 | Student ID | ชื่อ-นามสกุล | หน้าที่ |
 |------------|---------------|---------|
-| 67543210074-0 | นางสาว สุพิชญา ชื่นจุม | Backend / Deployment / Log Service / README |
-| 67543210072-4 | นายวรวัฒน์ จันทร์เที่ยง | Frontend / Gateway / End-to-End Testing / Documentation / Push |
+| 67543210074-0 | นางสาว สุพิชญา ชื่นจุม | Backend / Deployment / Log Service |
+| 67543210072-4 | นายวรวัฒน์ จันทร์เที่ยง | Frontend / Gateway / End-to-End Testing / Documentation |
 
 ---
 
